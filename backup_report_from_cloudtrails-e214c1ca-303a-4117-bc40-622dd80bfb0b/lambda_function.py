@@ -1,23 +1,3 @@
-# aws-backup-report-from-cloudtrail-events
-AWS Backup report generation from CloudTrail Events
-
-
-## The below resources are being used in this solution:
-1. Lambda function - Python 3.12 runtime. HandlerInfo - lambda_function.lambda_handler
-2. SNS for Notification, create a subscription with email id
-3. IAM Role with Lambda basic execution and Cloudtrail, SNS, S3 read and write permissions
-
-# Deployment of the solution
-Create a lambda function with the code given, and set the environment details for S3 bucket name and SNS Topic ARN.
-
-Steps:
-1. Lambda Function with Environments
-![Lambda_Settings](./Lambda_settings.png)
-![Lambdafunction](./Lambda_Environment_variables.png)
-
-
-2. Lambda function code.
-```
 import os
 import boto3
 import json
@@ -107,11 +87,3 @@ def lambda_handler(event, context):
         'statusCode': 200,
         'body': json.dumps('CSV file generated and SNS notification sent successfully!')
     }
-
-```
-
-3. Backup reports in S3 bucket.
-![s3 bucket for report](./S3_bucket_and_Object_details.png)
-
-4. Report structure
-![report format](./backup_report_csv_format.png)
