@@ -37,19 +37,9 @@ def lambda_handler(event, context):
     s3_client = boto3.client('s3')
     sns_client = boto3.client('sns')
 
-    # Extract start and end dates from Lambda input or default to the last 30 days
-    start_date_input = event.get('startDate', None)
-    end_date_input = event.get('endDate', None)
-
-    if start_date_input:
-        start_datetime = datetime.strptime(start_date_input, '%Y-%m-%dT%H:%M:%S')
-    else:
-        start_datetime = datetime.utcnow() - timedelta(days=30)
-
-    if end_date_input:
-        end_datetime = datetime.strptime(end_date_input, '%Y-%m-%dT%H:%M:%S')
-    else:
-        end_datetime = datetime.utcnow()
+    # Calculate start and end dates for the last 1 month
+    end_datetime = datetime.utcnow()
+    start_datetime = end_datetime - timedelta(days=30)
 
     # List all backup jobs within the specified date range, including failed and canceled jobs
     response = backup_client.list_backup_jobs(
@@ -68,16 +58,15 @@ def lambda_handler(event, context):
     write_to_csv(jobs, csv_filename)
 
     # Upload the CSV file to the specified S3 bucket with a timestamp
-    s3_key = f'backup_jobs_{timestamp}.csv'
+    s3_key = f'backup_report/backup_jobs_{timestamp}.csv'
     s3_client.upload_file(csv_filename, s3_bucket_name, s3_key)
 
     # Send SNS notification with the timestamped S3 key
     sns_client.publish(
         TopicArn=sns_topic_arn,
         Subject='AWS Backup Job Report',
-        Message=f'The AWS Backup job report for the last 30 days is available at: s3://{s3_bucket_name}/{s3_key}'
+        Message=f'The AWS Backup job report for the last 1 month is available at: s3://{s3_bucket_name}/{s3_key}'
     )
-
 
     return {
         'statusCode': 200,
