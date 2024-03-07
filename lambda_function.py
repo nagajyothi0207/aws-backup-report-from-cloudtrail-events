@@ -37,9 +37,19 @@ def lambda_handler(event, context):
     s3_client = boto3.client('s3')
     sns_client = boto3.client('sns')
 
-    # Calculate start and end dates dynamically as 30 days from the execution time
-    end_datetime = datetime.utcnow()
-    start_datetime = end_datetime - timedelta(days=30)
+    # Extract start and end dates from Lambda input or default to the last 30 days
+    start_date_input = event.get('startDate', None)
+    end_date_input = event.get('endDate', None)
+
+    if start_date_input:
+        start_datetime = datetime.strptime(start_date_input, '%Y-%m-%dT%H:%M:%S')
+    else:
+        start_datetime = datetime.utcnow() - timedelta(days=30)
+
+    if end_date_input:
+        end_datetime = datetime.strptime(end_date_input, '%Y-%m-%dT%H:%M:%S')
+    else:
+        end_datetime = datetime.utcnow()
 
     # List all backup jobs within the specified date range, including failed and canceled jobs
     response = backup_client.list_backup_jobs(
