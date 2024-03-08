@@ -44,14 +44,13 @@ def lambda_handler(event, context):
 
     # List all backup jobs within the specified date range, including failed and canceled jobs
     jobs = []
-    while start_datetime < end_datetime:
+    while end_datetime > start_datetime:
         response = backup_client.list_backup_jobs(
             ByCreatedBefore=end_datetime,
             ByCreatedAfter=start_datetime
         )
         jobs.extend(response.get('BackupJobs', []))
-        start_datetime = end_datetime  # Update start_datetime for the next iteration
-        end_datetime = start_datetime - timedelta(days=30)
+        end_datetime -= timedelta(days=30)
 
     # Generate a timestamp for the report
     timestamp = datetime.utcnow().strftime('%Y-%m-%d-%H-%M')
