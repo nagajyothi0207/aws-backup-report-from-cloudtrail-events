@@ -1,3 +1,4 @@
+
 import os
 import boto3
 import csv
@@ -49,8 +50,8 @@ def lambda_handler(event, context):
             ByCreatedAfter=start_datetime
         )
         jobs.extend(response.get('BackupJobs', []))
-        end_datetime = start_datetime
-        start_datetime = end_datetime - timedelta(days=30)
+        start_datetime = end_datetime  # Update start_datetime for the next iteration
+        end_datetime = start_datetime - timedelta(days=30)
 
     # Generate a timestamp for the report
     timestamp = datetime.utcnow().strftime('%Y-%m-%d-%H-%M')
@@ -78,3 +79,9 @@ def lambda_handler(event, context):
 if __name__ == "__main__":
     # For testing locally
     lambda_handler({}, {})
+
+
+
+
+
+
