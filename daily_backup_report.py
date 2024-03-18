@@ -57,17 +57,25 @@ def lambda_handler(event, context):
         ByCreatedBefore=end_datetime,
         ByCreatedAfter=start_datetime
     )
-    jobs.extend(response.get('BackupJobs', []))
 
-    # Filter only failed backup jobs
-    failed_jobs = [job for job in jobs if job.get('State', '') != 'COMPLETED']
+    # Paginate through the results to retrieve all failed backup jobs for the last day
+    while True:
+        jobs.extend([job for job in response.get('BackupJobs', []) if job.get('State', '') != 'COMPLETED'])
+        next_token = response.get('NextToken', None)
+        if not next_token:
+            break
+        response = backup_client.list_backup_jobs(
+            ByCreatedBefore=end_datetime,
+            ByCreatedAfter=start_datetime,
+            NextToken=next_token
+        )
 
     # Generate a timestamp for the report
     timestamp = datetime.utcnow().strftime('%Y-%m-%d-%H-%M')
 
     # Write the output to a CSV file with a timestamp
     csv_filename = f'/tmp/failed_backup_jobs_{timestamp}.csv'
-    write_to_csv(failed_jobs, csv_filename)
+    write_to_csv(jobs, csv_filename)
 
     # Upload the CSV file to the specified S3 bucket with a timestamp
     s3_key = f'backup_report/failed_backup_jobs_{timestamp}.csv'
