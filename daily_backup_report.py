@@ -17,24 +17,25 @@ def write_to_csv(jobs, csv_filename):
         
         writer.writeheader()
         for job in jobs:
-            backup_size_gib = job.get('BackupSizeInBytes', 0) / (1024 ** 3)  # Convert bytes to GiB
-            resource_id = job.get('ResourceArn', '')
-            instance_id = extract_instance_id(resource_id)
+            if job.get('State', '') != 'COMPLETED':
+                backup_size_gib = job.get('BackupSizeInBytes', 0) / (1024 ** 3)  # Convert bytes to GiB
+                resource_id = job.get('ResourceArn', '')
+                instance_id = extract_instance_id(resource_id)
 
-            writer.writerow({
-                'Date': job.get('CreationDate', ''),
-                'Completion Date': job.get('CompletionDate', ''),
-                'Backup Start Time': job.get('StartBy', ''),
-                'Backup End Time': job.get('CompletionDate', ''),
-                'State': job.get('State', ''),
-                'Message Category': job.get('MessageCategory', ''),  # Modify as per your requirements
-                'Backup Size (GiB)': round(backup_size_gib, 2),  # Round to two decimal places
-                'Resource ID': resource_id,
-                'Instance ID': instance_id,
-                'Resource Type': job.get('ResourceType', ''),
-                'Resource Name': job.get('ResourceName', ''),
-                'Status Message': job.get('StatusMessage', '')
-            })
+                writer.writerow({
+                    'Date': job.get('CreationDate', ''),
+                    'Completion Date': job.get('CompletionDate', ''),
+                    'Backup Start Time': job.get('StartBy', ''),
+                    'Backup End Time': job.get('CompletionDate', ''),
+                    'State': job.get('State', ''),
+                    'Message Category': job.get('MessageCategory', ''),  # Modify as per your requirements
+                    'Backup Size (GiB)': round(backup_size_gib, 2),  # Round to two decimal places
+                    'Resource ID': resource_id,
+                    'Instance ID': instance_id,
+                    'Resource Type': job.get('ResourceType', ''),
+                    'Resource Name': job.get('ResourceName', ''),
+                    'Status Message': job.get('StatusMessage', '')
+                })
 
 def lambda_handler(event, context):
     # Retrieve environment variables
@@ -50,7 +51,7 @@ def lambda_handler(event, context):
     end_datetime = datetime.utcnow()
     start_datetime = end_datetime - timedelta(days=1)
 
-    # List all backup jobs within the specified date range, including failed and canceled jobs
+    # List all backup jobs within the specified date range
     jobs = []
     response = backup_client.list_backup_jobs(
         ByCreatedBefore=end_datetime,
@@ -58,22 +59,25 @@ def lambda_handler(event, context):
     )
     jobs.extend(response.get('BackupJobs', []))
 
+    # Filter only failed backup jobs
+    failed_jobs = [job for job in jobs if job.get('State', '') != 'COMPLETED']
+
     # Generate a timestamp for the report
     timestamp = datetime.utcnow().strftime('%Y-%m-%d-%H-%M')
 
     # Write the output to a CSV file with a timestamp
-    csv_filename = f'/tmp/backup_jobs_{timestamp}.csv'
-    write_to_csv(jobs, csv_filename)
+    csv_filename = f'/tmp/failed_backup_jobs_{timestamp}.csv'
+    write_to_csv(failed_jobs, csv_filename)
 
     # Upload the CSV file to the specified S3 bucket with a timestamp
-    s3_key = f'backup_report/backup_jobs_{timestamp}.csv'
+    s3_key = f'backup_report/failed_backup_jobs_{timestamp}.csv'
     s3_client.upload_file(csv_filename, s3_bucket_name, s3_key)
 
     # Send SNS notification with the timestamped S3 key
     sns_client.publish(
         TopicArn=sns_topic_arn,
-        Subject='AWS Backup Job Report',
-        Message=f'The AWS Backup job report for the last 1 day is available at: s3://{s3_bucket_name}/{s3_key}'
+        Subject='AWS Failed Backup Job Report',
+        Message=f'The AWS failed backup job report for the last 1 day is available at: s3://{s3_bucket_name}/{s3_key}'
     )
 
     return {
