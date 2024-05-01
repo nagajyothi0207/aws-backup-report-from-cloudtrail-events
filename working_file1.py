@@ -45,15 +45,15 @@ def fetch_monthly_backup_jobs(backup_client, start_datetime, end_datetime):
     return jobs
 
 def lambda_handler(event, context):
-    try:
-        # Retrieve environment variables
-        s3_bucket_name = os.environ['S3_BUCKET_NAME']
-        sns_topic_arn = os.environ['SNS_TOPIC_ARN']
+    # Retrieve environment variables
+    s3_bucket_name = os.environ['S3_BUCKET_NAME']
+    sns_topic_arn = os.environ['SNS_TOPIC_ARN']
 
+    try:
         # Get the input month and year from the event, or use current execution time
-        input_month = int(event.get('month', None))
-        input_year = int(event.get('year', None))
-        if input_month is None or input_year is None:
+        input_month = int(event.get('month', ''))
+        input_year = int(event.get('year', ''))
+        if input_month == '' or input_year == '':
             input_year, input_month = get_execution_month_year()
 
         # Create a Boto3 AWS Backup client using the Lambda execution role's permissions
