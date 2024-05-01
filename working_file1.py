@@ -45,53 +45,59 @@ def fetch_monthly_backup_jobs(backup_client, start_datetime, end_datetime):
     return jobs
 
 def lambda_handler(event, context):
-    # Retrieve environment variables
-    s3_bucket_name = os.environ['S3_BUCKET_NAME']
-    sns_topic_arn = os.environ['SNS_TOPIC_ARN']
+    try:
+        # Retrieve environment variables
+        s3_bucket_name = os.environ['S3_BUCKET_NAME']
+        sns_topic_arn = os.environ['SNS_TOPIC_ARN']
 
-    # Get the input month and year from the event, or use current execution time
-    input_month = int(event.get('month', None))
-    input_year = int(event.get('year', None))
-    if input_month is None or input_year is None:
-        input_year, input_month = get_execution_month_year()
+        # Get the input month and year from the event, or use current execution time
+        input_month = int(event.get('month', None))
+        input_year = int(event.get('year', None))
+        if input_month is None or input_year is None:
+            input_year, input_month = get_execution_month_year()
 
-    # Create a Boto3 AWS Backup client using the Lambda execution role's permissions
-    backup_client = boto3.client('backup')
-    s3_client = boto3.client('s3')
-    sns_client = boto3.client('sns')
+        # Create a Boto3 AWS Backup client using the Lambda execution role's permissions
+        backup_client = boto3.client('backup')
+        s3_client = boto3.client('s3')
+        sns_client = boto3.client('sns')
 
-    # Calculate start and end dates for the specified month and year
-    start_datetime = datetime(input_year, input_month, 1)
-    end_datetime = start_datetime.replace(day=1, month=start_datetime.month % 12 + 1) - timedelta(days=1)
+        # Calculate start and end dates for the specified month and year
+        start_datetime = datetime(input_year, input_month, 1)
+        end_datetime = start_datetime.replace(day=1, month=start_datetime.month % 12 + 1) - timedelta(days=1)
 
-    # Fetch all backup jobs for the entire month
-    jobs = fetch_monthly_backup_jobs(backup_client, start_datetime, end_datetime)
+        # Fetch all backup jobs for the entire month
+        jobs = fetch_monthly_backup_jobs(backup_client, start_datetime, end_datetime)
 
-    # Generate a timestamp for the report
-    timestamp = datetime.utcnow().strftime('%Y-%m-%d-%H-%M')
+        # Generate a timestamp for the report
+        timestamp = datetime.utcnow().strftime('%Y-%m-%d-%H-%M')
 
-    # Write the output to a CSV file with a timestamp
-    csv_filename = f'/tmp/backup_jobs_{timestamp}.csv'
-    write_to_csv(jobs, csv_filename)
+        # Write the output to a CSV file with a timestamp
+        csv_filename = f'/tmp/backup_jobs_{timestamp}.csv'
+        write_to_csv(jobs, csv_filename)
 
-    # Generate folder name with year-month-date
-    folder_name = end_datetime.strftime('%Y-%m-%d')
+        # Generate folder name with year-month-date
+        folder_name = end_datetime.strftime('%Y-%m-%d')
 
-    # Upload the CSV file to the specified folder in the S3 bucket
-    s3_key = f'backup_report/{folder_name}/backup_jobs_{timestamp}.csv'
-    s3_client.upload_file(csv_filename, s3_bucket_name, s3_key)
+        # Upload the CSV file to the specified folder in the S3 bucket
+        s3_key = f'backup_report/{folder_name}/backup_jobs_{timestamp}.csv'
+        s3_client.upload_file(csv_filename, s3_bucket_name, s3_key)
 
-    # Send SNS notification with the timestamped S3 key
-    sns_client.publish(
-        TopicArn=sns_topic_arn,
-        Subject='AWS Backup Job Report',
-        Message=f'The AWS Backup job report for {end_datetime.strftime("%B %Y")} is available at: s3://{s3_bucket_name}/{s3_key}'
-    )
+        # Send SNS notification with the timestamped S3 key
+        sns_client.publish(
+            TopicArn=sns_topic_arn,
+            Subject='AWS Backup Job Report',
+            Message=f'The AWS Backup job report for {end_datetime.strftime("%B %Y")} is available at: s3://{s3_bucket_name}/{s3_key}'
+        )
 
-    return {
-        'statusCode': 200,
-        'body': json.dumps('CSV file generated and SNS notification sent successfully!')
-    }
+        return {
+            'statusCode': 200,
+            'body': json.dumps('CSV file generated and SNS notification sent successfully!')
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps(f'Error: {str(e)}')
+        }
 
 if __name__ == "__main__":
     # For testing locally
