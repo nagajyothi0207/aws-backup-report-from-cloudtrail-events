@@ -51,10 +51,13 @@ def lambda_handler(event, context):
 
     try:
         # Get the input month and year from the event, or use current execution time
-        input_month = int(event.get('month', ''))
-        input_year = int(event.get('year', ''))
-        if input_month == '' or input_year == '':
+        input_month = event.get('month', '')
+        input_year = event.get('year', '')
+        if input_month == '':
             input_year, input_month = get_execution_month_year()
+        else:
+            input_month = int(input_month)
+            input_year = int(input_year)
 
         # Create a Boto3 AWS Backup client using the Lambda execution role's permissions
         backup_client = boto3.client('backup')
