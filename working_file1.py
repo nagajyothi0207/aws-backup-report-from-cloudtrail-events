@@ -33,6 +33,18 @@ def get_month_dates(year, month):
     last_day = first_day.replace(day=1, month=first_day.month % 12 + 1) - timedelta(days=1)
     return first_day, last_day
 
+def fetch_monthly_backup_jobs(backup_client, start_datetime, end_datetime):
+    # Fetch backup jobs for each day in the specified date range
+    jobs = []
+    while start_datetime <= end_datetime:
+        response = backup_client.list_backup_jobs(
+            ByCreatedBefore=end_datetime + timedelta(days=1),  # Add 1 day to end_datetime to include the entire last day
+            ByCreatedAfter=start_datetime
+        )
+        jobs.extend(response.get('BackupJobs', []))
+        start_datetime += timedelta(days=1)
+    return jobs
+
 def lambda_handler(event, context):
     # Retrieve environment variables
     s3_bucket_name = os.environ['S3_BUCKET_NAME']
@@ -50,12 +62,8 @@ def lambda_handler(event, context):
     # Calculate start and end dates for the specified month and year
     start_datetime, end_datetime = get_month_dates(input_year, input_month)
 
-    # List all backup jobs within the specified date range, including failed and canceled jobs
-    response = backup_client.list_backup_jobs(
-        ByCreatedBefore=end_datetime + timedelta(days=1),  # Add 1 day to end_datetime to include the entire last day
-        ByCreatedAfter=start_datetime
-    )
-    jobs = response.get('BackupJobs', [])
+    # Fetch all backup jobs for the entire month
+    jobs = fetch_monthly_backup_jobs(backup_client, start_datetime, end_datetime)
 
     # Generate a timestamp for the report
     timestamp = datetime.utcnow().strftime('%Y-%m-%d-%H-%M')
