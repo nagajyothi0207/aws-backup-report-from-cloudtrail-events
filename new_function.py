@@ -27,29 +27,39 @@ def write_to_csv(jobs, csv_filename):
                 'Status Message': job.get('StatusMessage', '')
             })
 
+def get_month_dates(year, month):
+    # Get the first day and last day of the specified month and year
+    first_day = datetime(year, int(month), 1)  # Convert month to integer
+    last_day = datetime(year, int(month) % 12 + 1, 1) if int(month) == 12 else datetime(year, int(month) + 1, 1)  # Convert month to integer
+    last_day -= timedelta(days=1)
+    return first_day, last_day
+
 def lambda_handler(event, context):
     # Retrieve environment variables
     s3_bucket_name = os.environ['S3_BUCKET_NAME']
     sns_topic_arn = os.environ['SNS_TOPIC_ARN']
+
+    # Get the input month and year from the event
+    input_month = event.get('month')
+    input_year = event.get('year')
 
     # Create a Boto3 AWS Backup client using the Lambda execution role's permissions
     backup_client = boto3.client('backup')
     s3_client = boto3.client('s3')
     sns_client = boto3.client('sns')
 
-    # Calculate start and end dates for the last 1 month
-    end_datetime = datetime.utcnow()
-    start_datetime = end_datetime - timedelta(days=30)
+    # Calculate start and end dates for the specified month and year
+    start_datetime, end_datetime = get_month_dates(int(input_year), int(input_month))  # Convert input to integers
 
     # List all backup jobs within the specified date range, including failed and canceled jobs
     jobs = []
     while start_datetime <= end_datetime:
         response = backup_client.list_backup_jobs(
-            ByCreatedBefore=end_datetime,
+            ByCreatedBefore=end_datetime + timedelta(days=1),  # Add 1 day to end_datetime to include the entire last day
             ByCreatedAfter=start_datetime
         )
         jobs.extend(response.get('BackupJobs', []))
-        end_datetime -= timedelta(days=1)
+        start_datetime += timedelta(days=1)
 
     # Generate a timestamp for the report
     timestamp = datetime.utcnow().strftime('%Y-%m-%d-%H-%M')
@@ -58,15 +68,18 @@ def lambda_handler(event, context):
     csv_filename = f'/tmp/backup_jobs_{timestamp}.csv'
     write_to_csv(jobs, csv_filename)
 
-    # Upload the CSV file to the specified S3 bucket with a timestamp
-    s3_key = f'backup_report/backup_jobs_{timestamp}.csv'
+    # Generate folder name with year-month-date
+    folder_name = end_datetime.strftime('%Y-%m-%d')
+
+    # Upload the CSV file to the specified folder in the S3 bucket
+    s3_key = f'backup_report/{folder_name}/backup_jobs_{timestamp}.csv'
     s3_client.upload_file(csv_filename, s3_bucket_name, s3_key)
 
     # Send SNS notification with the timestamped S3 key
     sns_client.publish(
         TopicArn=sns_topic_arn,
         Subject='AWS Backup Job Report',
-        Message=f'The AWS Backup job report for the last 1 month is available at: s3://{s3_bucket_name}/{s3_key}'
+        Message=f'The AWS Backup job report for {end_datetime.strftime("%B %Y")} is available at: s3://{s3_bucket_name}/{s3_key}'
     )
 
     return {
@@ -76,4 +89,5 @@ def lambda_handler(event, context):
 
 if __name__ == "__main__":
     # For testing locally
-    lambda_handler({}, {})
+    event = {'month': '4', 'year': '2024'}  # Example input for April 2024 as strings
+    lambda_handler(event, {})
