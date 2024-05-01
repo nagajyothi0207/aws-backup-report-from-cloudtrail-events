@@ -27,18 +27,17 @@ def write_to_csv(jobs, csv_filename):
                 'Status Message': job.get('StatusMessage', '')
             })
 
-def get_month_dates(year, month):
-    # Get the first day and last day of the specified month and year
-    first_day = datetime(year, month, 1)
-    last_day = first_day.replace(day=1, month=first_day.month % 12 + 1) - timedelta(days=1)
-    return first_day, last_day
+def get_execution_month_year():
+    # Get the current execution time and extract month and year
+    now = datetime.utcnow()
+    return now.year, now.month
 
 def fetch_monthly_backup_jobs(backup_client, start_datetime, end_datetime):
     # Fetch backup jobs for each day in the specified date range
     jobs = []
     while start_datetime <= end_datetime:
         response = backup_client.list_backup_jobs(
-            ByCreatedBefore=end_datetime + timedelta(days=1),  # Add 1 day to end_datetime to include the entire last day
+            ByCreatedBefore=start_datetime + timedelta(days=1),  # Add 1 day to start_datetime to include the entire day
             ByCreatedAfter=start_datetime
         )
         jobs.extend(response.get('BackupJobs', []))
@@ -50,9 +49,11 @@ def lambda_handler(event, context):
     s3_bucket_name = os.environ['S3_BUCKET_NAME']
     sns_topic_arn = os.environ['SNS_TOPIC_ARN']
 
-    # Get the input month and year from the event
-    input_month = int(event.get('month', 1))
-    input_year = int(event.get('year', 2022))
+    # Get the input month and year from the event, or use current execution time
+    input_month = int(event.get('month', None))
+    input_year = int(event.get('year', None))
+    if input_month is None or input_year is None:
+        input_year, input_month = get_execution_month_year()
 
     # Create a Boto3 AWS Backup client using the Lambda execution role's permissions
     backup_client = boto3.client('backup')
@@ -60,7 +61,8 @@ def lambda_handler(event, context):
     sns_client = boto3.client('sns')
 
     # Calculate start and end dates for the specified month and year
-    start_datetime, end_datetime = get_month_dates(input_year, input_month)
+    start_datetime = datetime(input_year, input_month, 1)
+    end_datetime = start_datetime.replace(day=1, month=start_datetime.month % 12 + 1) - timedelta(days=1)
 
     # Fetch all backup jobs for the entire month
     jobs = fetch_monthly_backup_jobs(backup_client, start_datetime, end_datetime)
@@ -93,5 +95,5 @@ def lambda_handler(event, context):
 
 if __name__ == "__main__":
     # For testing locally
-    event = {'month': 4, 'year': 2024}  # Example input for April 2024
+    event = {}  # No input provided for month and year
     lambda_handler(event, {})
